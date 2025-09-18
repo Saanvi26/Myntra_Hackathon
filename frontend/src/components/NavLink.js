@@ -9,8 +9,9 @@ const NavLink = ({ text, showNewTag = false }) => {
     navigate(`/${result.toLowerCase()}`);
   };
 
+  const dest = `/${text.replace(/\s+/g, "").toLowerCase()}`;
   return (
-    <a href="#" className="nav-link" onClick={handleClick}>
+    <a href={dest} className="nav-link" onClick={handleClick}>
       {text}
       {showNewTag && <span className="new-tag">NEW</span>}
     </a>
