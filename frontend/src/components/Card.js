@@ -1,56 +1,77 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import io from "socket.io-client";
 import "./Card.css";
 
-const mockGroups = [
-  { id: 1, name: "Family Shopping" },
-  { id: 2, name: "Friends Group" },
-  { id: 3, name: "Office Colleagues" },
-];
+// socket for sharing products from catalog (connect on demand; no retries)
+const shareSocket = io("/", { path: "/socket.io", autoConnect: false, reconnection: false, timeout: 1000 });
 
 const Card = ({ images, name, description, price, originalPrice }) => {
   const [currentImage, setCurrentImage] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+  const [myRooms, setMyRooms] = useState([]);
 
-  const discount = originalPrice - price;
+  const discount = (Number(originalPrice) || 0) - (Number(price) || 0);
+  const user = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null");
+    } catch {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     let interval;
     if (hovered) {
       interval = setInterval(() => {
         setCurrentImage((prev) => (prev + 1) % images.length);
-      }, 1500); // Change image every 1.5 seconds
+      }, 1500);
     } else {
-      setCurrentImage(0); // Reset to first image when not hovered
+      setCurrentImage(0);
     }
-
     return () => clearInterval(interval);
   }, [hovered, images.length]);
 
-  const handleShareClick = (e) => {
+  const openShare = async (e) => {
     e.stopPropagation();
+    if (!user) {
+      alert("Please login on Group Shopping tab first.");
+      return;
+    }
+    const res = await fetch(`/api/rooms?username=${encodeURIComponent(user.username)}`);
+    const rooms = await res.json();
+    setMyRooms(rooms);
     setShowModal(true);
   };
 
-  const handleGroupSelect = (groupId) => {
-    setSelectedGroups((prev) =>
-      prev.includes(groupId)
-        ? prev.filter((id) => id !== groupId)
-        : [...prev, groupId]
+  const toggleGroup = (roomId) => {
+    setSelectedGroupIds((prev) =>
+      prev.includes(roomId) ? prev.filter((id) => id !== roomId) : [...prev, roomId]
     );
   };
 
-  const handleShareToGroups = () => {
-    // Here you would trigger the actual share logic
+  const shareToSelected = async () => {
+    if (!user) return;
+    try { if (!shareSocket.connected) shareSocket.connect(); } catch {}
+    const targets = myRooms.filter((r) => selectedGroupIds.includes(r._id));
+    for (const room of targets) {
+      shareSocket.emit("join_room", { roomId: room._id, username: user.username });
+      await new Promise((res) => setTimeout(res, 120));
+      shareSocket.emit("send_message", {
+        roomId: room._id,
+        sender: user.username,
+        type: "product",
+        content: { name, price, image: images[0] },
+      });
+    }
     setShowModal(false);
-    setSelectedGroups([]);
-    // Optionally show a toast/notification
+    setSelectedGroupIds([]);
   };
 
-  const handleCloseModal = () => {
+  const closeModal = () => {
     setShowModal(false);
-    setSelectedGroups([]);
+    setSelectedGroupIds([]);
   };
 
   return (
@@ -61,11 +82,7 @@ const Card = ({ images, name, description, price, originalPrice }) => {
         onMouseLeave={() => setHovered(false)}
       >
         <div className="image-container">
-          <img
-            src={images[currentImage]}
-            alt={name}
-            className="product-image"
-          />
+          <img src={images[currentImage]} alt={name} className="product-image" />
           <div className="rating-overlay">⭐ 4.2 | 1.6k</div>
         </div>
 
@@ -74,19 +91,15 @@ const Card = ({ images, name, description, price, originalPrice }) => {
           <p className="product-description">{description}</p>
           <div className="price-section">
             <span className="price">Rs. {price}</span>
-            {originalPrice && (
-              <span className="original-price">Rs. {originalPrice}</span>
-            )}
-            {discount > 0 && (
-              <span className="discount"> (Rs. {discount} OFF)</span>
-            )}
+            {originalPrice && <span className="original-price">Rs. {originalPrice}</span>}
+            {discount > 0 && <span className="discount"> (Rs. {discount} OFF)</span>}
           </div>
 
           {hovered && (
             <div className="hover-info">
               <button className="wishlist-button">♡ Add to Wishlist</button>
-              <button className="share-button" onClick={handleShareClick}>
-                Share in group
+              <button className="share-button" onClick={openShare}>
+                Add to group
               </button>
             </div>
           )}
@@ -95,102 +108,24 @@ const Card = ({ images, name, description, price, originalPrice }) => {
 
       {showModal && (
         <div className="modal-overlay">
-          <div className="create-group-modal">
-            <h3>Select Groups to Share</h3>
-            <div
-              style={{ maxHeight: 200, overflowY: "auto", marginBottom: 16 }}
-            >
-              {mockGroups.map((group) => (
+          <div className="share-modal">
+            <h3 className="modal-title">Select groups</h3>
+            <div className="group-list">
+              {myRooms.map((room) => (
                 <div
-                  key={group.id}
-                  className={`user-item${
-                    selectedGroups.includes(group.id) ? " selected" : ""
-                  }`}
-                  style={{
-                    display: "flex",
-                    alignItems: "left",
-                    cursor: "pointer",
-                    padding: "10px 15px",
-                    borderBottom: "1px solid #f0f2f5",
-                    background: selectedGroups.includes(group.id)
-                      ? "#e8f4fd"
-                      : "#fff",
-                    color: selectedGroups.includes(group.id)
-                      ? "#ff3f6c"
-                      : "#3b4a54",
-                    fontWeight: selectedGroups.includes(group.id) ? 500 : 400,
-                    transition: "background 0.2s, color 0.2s",
-                  }}
-                  onClick={() => handleGroupSelect(group.id)}
+                  key={room._id}
+                  className={`group-list-item${selectedGroupIds.includes(room._id) ? " selected" : ""}`}
+                  onClick={() => toggleGroup(room._id)}
                 >
-                  <span
-                    style={{
-                      marginRight: 12,
-                      display: "flex",
-                      alignItems: "left",
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleGroupSelect(group.id);
-                    }}
-                  >
-                    <span
-                      className={`custom-checkbox${
-                        selectedGroups.includes(group.id) ? " checked" : ""
-                      }`}
-                      style={{
-                        width: 20,
-                        height: 20,
-                        border: "2px solid #ff3f6c",
-                        borderRadius: 6,
-                        display: "inline-block",
-                        background: selectedGroups.includes(group.id)
-                          ? "#ff3f6c"
-                          : "#fff",
-                        transition: "background 0.2s, border-color 0.2s",
-                        position: "relative",
-                        marginRight: 4,
-                      }}
-                    >
-                      {selectedGroups.includes(group.id) && (
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 14 14"
-                          style={{
-                            position: "absolute",
-                            top: 2,
-                            left: 2,
-                            display: "block",
-                          }}
-                        >
-                          <polyline
-                            points="1,7 5,11 13,3"
-                            style={{
-                              fill: "none",
-                              stroke: "#fff",
-                              strokeWidth: 2.5,
-                              strokeLinecap: "round",
-                              strokeLinejoin: "round",
-                            }}
-                          />
-                        </svg>
-                      )}
-                    </span>
-                  </span>
-                  {group.name}
+                  <span className={`checkbox${selectedGroupIds.includes(room._id) ? " checked" : ""}`} />
+                  <span className="group-name">{room.name}</span>
                 </div>
               ))}
+              {myRooms.length === 0 && <div className="empty-groups">No groups joined yet</div>}
             </div>
-            <div className="modal-buttons">
-              <button className="cancel-btn" onClick={handleCloseModal}>
-                Cancel
-              </button>
-              <button
-                className="create-btn"
-                onClick={handleShareToGroups}
-                disabled={selectedGroups.length === 0}
-              >
+            <div className="modal-actions">
+              <button className="btn btn-light" onClick={closeModal}>Cancel</button>
+              <button className="btn btn-primary" onClick={shareToSelected} disabled={selectedGroupIds.length === 0}>
                 Share
               </button>
             </div>
