@@ -71,6 +71,22 @@
   padding: 15px;
 }
 
+/* Centered auth modal */
+.auth-modal-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); z-index: 3000; }
+.auth-modal-card { width: 520px; max-width: calc(100% - 32px); background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.35); border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.25); padding: 18px; animation: slideInUp 260ms ease-out; }
+.auth-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+.auth-tab { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.25); cursor: pointer; font-weight: 600; }
+.auth-tab.active { background: rgba(255,255,255,0.6); }
+.auth-fields { display: grid; gap: 10px; margin: 10px 0; }
+.auth-fields input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.6); background: rgba(255,255,255,0.7); }
+.auth-actions { display: flex; gap: 10px; margin-top: 6px; }
+.btn { padding: 10px 12px; border-radius: 8px; border: 0; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(0,0,0,0.12); }
+.btn-primary { background: linear-gradient(135deg, #32cd32, #228b22); color: #fff; }
+.btn-accent { background: linear-gradient(135deg, #ff3f6c, #ff6f91); color: #fff; }
+.btn-light { background: #fff; color: #333; border: 1px solid #ddd; }
+@keyframes slideInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
 
 .banner-content {
   display: flex;
@@ -378,4 +394,6 @@
     gap: 15px;
     text-align: center;
   }
+
+  .home-auth-panel { position: static; width: auto; margin: 12px 20px; }
 }
