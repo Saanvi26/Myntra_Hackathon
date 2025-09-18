@@ -4,7 +4,14 @@ import "../App.css";
 import "./Navbar.css";
 import myntraLogo from '../assets/Myntra-logo.png';
 
+import { Link, useNavigate } from "react-router-dom";
 function Navbar() {
+  const navigate = useNavigate();
+  const openAuth = (mode) => {
+    try { window.dispatchEvent(new CustomEvent("open-auth", { detail: { mode } })); } catch {}
+    const ts = Date.now();
+    navigate(`/?auth=${mode}&ts=${ts}`);
+  };
   return (
     <header className="header">
       <div className="header-content">
@@ -40,20 +47,10 @@ function Navbar() {
           </div>
         </div>
 
-        {/* User Icons */}
-        <div className="user-actions">
-          <div className="action-item">
-            <div className="action-icon">👤</div>
-            <span>Profile</span>
-          </div>
-          <div className="action-item">
-            <div className="action-icon">❤️</div>
-            <span>Wishlist</span>
-          </div>
-          <div className="action-item">
-            <div className="action-icon">🛍️</div>
-            <span>Bag</span>
-          </div>
+        {/* Auth Buttons */}
+        <div className="auth-buttons">
+          <Link to="/?auth=login" onClick={(e) => { e.preventDefault(); openAuth("login"); }} className="auth-btn login-btn">Login</Link>
+          <Link to="/?auth=signup" onClick={(e) => { e.preventDefault(); openAuth("signup"); }} className="auth-btn signup-btn">Sign up</Link>
         </div>
       </div>
     </header>
