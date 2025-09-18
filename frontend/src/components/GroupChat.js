@@ -1,419 +1,361 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import io from "socket.io-client";
 import "./GroupChat.css";
-import men_shoes_1 from "../assets/men_shoes/men_shoes_1.png";
+
+const socket = io("/", { path: "/socket.io", autoConnect: false, reconnection: false, timeout: 1000 });
+
 const GroupChat = () => {
-  const [groups, setGroups] = useState([
-    {
-      id: 1,
-      name: "Family Shopping",
-      lastMessage: "3 products shared",
-      time: "2:30 PM",
-      unreadCount: 2,
-      products: [
-        {
-          id: 1,
-          name: "Winter Jacket",
-          price: "₹2,999",
-          image: "/src/assets/men_jackets/men_jacket_11.png",
-          votes: 5,
-          userVote: 0, // -1 for downvote, 0 for no vote, 1 for upvote
-        },
-        {
-          id: 2,
-          name: "Casual Shirt",
-          price: "₹1,299",
-          image: "/src/assets/men_shirts/men_shirt_11.png",
-          votes: 3,
-          userVote: 0,
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: "Friends Group",
-      lastMessage: "1 product shared",
-      time: "1:15 PM",
-      unreadCount: 0,
-      products: [
-        {
-          id: 3,
-          name: "Running Shoes",
-          price: "₹4,999",
-          image: men_shoes_1,
-          votes: 8,
-          userVote: 0,
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: "Office Colleagues",
-      lastMessage: "2 products shared",
-      time: "12:45 PM",
-      unreadCount: 5,
-      products: [
-        {
-          id: 4,
-          name: "Formal Shirt",
-          price: "₹1,599",
-          image: "/src/assets/men_shirts/men_shirt_12.png",
-          votes: 2,
-          userVote: 0,
-        },
-        {
-          id: 5,
-          name: "Leather Shoes",
-          price: "₹3,499",
-          image: "/src/assets/men_shoes/men_shoes_2.png",
-          votes: 6,
-          userVote: 0,
-        },
-      ],
-    },
-  ]);
 
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupMembers, setnewGroupMembers] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [availableUsers] = useState([
-    { id: 1, name: "Alice" },
-    { id: 2, name: "Bob" },
-    { id: 3, name: "Charlie" },
-    { id: 4, name: "David" },
-    { id: 5, name: "Eve" },
-  ]);
-  const [showUserSelectionModal, setShowUserSelectionModal] = useState(false);
-  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [user, setUser] = useState(null); 
 
-  const handleSearchMembers = (e) => {
-    setSearchTerm(e.target.value);
-  };
+  // data
+  const [rooms, setRooms] = useState([]);
+  const [pendingRooms, setPendingRooms] = useState([]);
+  const [currentRoom, setCurrentRoom] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [text, setText] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const [invited, setInvited] = useState([]);
+  const [newRoomName, setNewRoomName] = useState("");
+  const [usersLoading, setUsersLoading] = useState(false);
 
-  const handleSelectMember = (user) => {
-    setnewGroupMembers((prevMembers) =>
-      prevMembers.includes(user)
-        ? prevMembers.filter((member) => member.id !== user.id)
-        : [...prevMembers, user]
-    );
-  };
+  const messagesEndRef = useRef(null);
+  const me = useMemo(() => (user ? user.username : ""), [user]);
 
-  const filteredUsers = availableUsers.filter((user) =>
-    user.name.toLowerCase().startsWith(searchTerm.toLowerCase())
-  );
-
-  const handleCreateGroup = () => {
-    if (newGroupName.trim()) {
-      setShowCreateGroup(false);
-      setShowUserSelectionModal(true);
-    }
-    console.log(groups);
-  };
-
-  const handleGroupClick = (group) => {
-    setSelectedGroup(group);
-  };
-
-  const handleVote = (groupId, productId, voteType) => {
-    setGroups(
-      groups.map((group) => {
-        if (group.id === groupId) {
-          return {
-            ...group,
-            products: group.products.map((product) => {
-              if (product.id === productId) {
-                let newVotes = product.votes;
-                let newUserVote = product.userVote;
-
-                // Handle vote logic
-                if (product.userVote === 0) {
-                  // No previous vote
-                  newVotes += voteType;
-                  newUserVote = voteType;
-                } else if (product.userVote === voteType) {
-                  // Same vote - remove it
-                  newVotes -= voteType;
-                  newUserVote = 0;
-                } else {
-                  // Different vote - change it
-                  newVotes = newVotes - product.userVote + voteType;
-                  newUserVote = voteType;
-                }
-
-                return {
-                  ...product,
-                  votes: newVotes,
-                  userVote: newUserVote,
-                };
-              }
-              return product;
-            }),
-          };
-        }
-        return group;
-      })
-    );
-
-    // Update selected group if it's the same
-    if (selectedGroup && selectedGroup.id === groupId) {
-      const updatedGroup = groups.find((g) => g.id === groupId);
-      if (updatedGroup) {
-        setSelectedGroup(updatedGroup);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("user") || "null");
+      if (saved) {
+        setUser(saved);
+        refreshRooms(saved.username);
       }
+    } catch {}
+  }, []);
+
+  // socket listeners
+  useEffect(() => {
+    if (!currentRoom) return () => {};
+
+    const onMessage = (msg) => setMessages((prev) => [...prev, msg]);
+
+    const onSystem = (m) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          _id: `sys-${Date.now()}`,
+          type: "system",
+          content: { text: m.text },
+          sender: "system",
+          votes: 0,
+          voters: [],
+          roomId: currentRoom ? currentRoom._id : undefined,
+        },
+      ]);
+    };
+
+    const onVoteUpdated = ({ messageId, votes }) => {
+      setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, votes } : m)));
+    };
+
+    const handleUserOnline = ({ username }) => {
+      setOnlineUsers((prev) => [...new Set([...prev, username])]);
+    };
+
+    const handleUserOffline = ({ username }) => {
+      setOnlineUsers((prev) => prev.filter((u) => u !== username));
+    };
+
+    try {
+      if (!socket.connected) socket.connect();
+    } catch {}
+
+    socket.on("message", onMessage);
+    socket.on("system_message", onSystem);
+    socket.on("vote_updated", onVoteUpdated);
+    socket.on("user_online", handleUserOnline);
+    socket.on("user_offline", handleUserOffline);
+
+    return () => {
+      socket.off("message", onMessage);
+      socket.off("system_message", onSystem);
+      socket.off("vote_updated", onVoteUpdated);
+      socket.off("user_online", handleUserOnline);
+      socket.off("user_offline", handleUserOffline);
+      try {
+        socket.disconnect();
+      } catch {}
+    };
+  }, [currentRoom]);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  // API 
+  const api = async (path, opts = {}) => {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  };
+
+  // auth
+  const handleSignup = async () => {
+    const body = { username, email, password, displayName };
+    await api("/api/signup", { method: "POST", body: JSON.stringify(body) });
+    const data = await api("/api/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    setUser(data.user);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    await refreshRooms(data.user.username);
+  };
+
+  const handleLogin = async () => {
+    const data = await api("/api/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    setUser(data.user);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    await refreshRooms(data.user.username);
+  };
+
+  // rooms
+  const refreshRooms = async (uname = me) => {
+    if (!uname) return;
+    const [joined, pending] = await Promise.all([
+      api(`/api/rooms?username=${encodeURIComponent(uname)}`),
+      api(`/api/rooms/pending?username=${encodeURIComponent(uname)}`),
+    ]);
+    setRooms(joined);
+    setPendingRooms(pending);
+  };
+
+  const handleCreateRoom = async () => {
+    setShowCreate(true);
+    setNewRoomName("");
+    setInvited([]);
+    setUsersLoading(true);
+    try {
+      const users = await api("/api/users");
+      const filtered = users.filter((u) => u.username?.toLowerCase() !== me?.toLowerCase());
+      setAllUsers(filtered);
+    } finally {
+      setUsersLoading(false);
     }
   };
 
-  const handleCreateGroupWithMembers = () => {
-    if (newGroupName.trim() && newGroupMembers.length > 0) {
-      const newGroup = {
-        id: groups.length + 1, // Simple ID generation
-        name: newGroupName,
-        lastMessage: "No messages yet",
-        time: new Date().toLocaleTimeString(),
-        unreadCount: 0,
-        products: [], // No products initially
-        members: newGroupMembers, // Add selected members to the group
-      };
-      setGroups((prevGroups) => [...prevGroups, newGroup]);
-      setShowUserSelectionModal(false);
-      setNewGroupName("");
-      setnewGroupMembers([]);
-      setSearchTerm("");
-    }
+  const toggleInvite = (uname) => {
+    setInvited((prev) => (prev.includes(uname) ? prev.filter((u) => u !== uname) : [...prev, uname]));
   };
 
+  const confirmCreateRoom = async () => {
+    if (!newRoomName.trim()) return;
+    const room = await api("/api/rooms", {
+      method: "POST",
+      body: JSON.stringify({ name: newRoomName.trim(), creator: me, invited }),
+    });
+    setRooms((prev) => [...prev, room]);
+    setShowCreate(false);
+  };
+
+  const handleAcceptInvite = async (roomId) => {
+    await api(`/api/rooms/${roomId}/join`, {
+      method: "POST",
+      body: JSON.stringify({ username: me }),
+    });
+    await refreshRooms();
+  };
+
+  const handleJoinRoom = async (room) => {
+    setCurrentRoom(room);
+    setMessages([]);
+
+    const history = await api(`/api/rooms/${room._id}/messages`);
+    setMessages(history);
+
+    try {
+      if (!socket.connected) socket.connect();
+    } catch {}
+    socket.emit("join_room", { roomId: room._id, username: me });
+  };
+
+  const handleSendText = async () => {
+    if (!currentRoom || !text.trim()) return;
+    try {
+      if (!socket.connected) socket.connect();
+    } catch {}
+    socket.emit("send_message", {
+      roomId: currentRoom._id,
+      sender: me,
+      type: "text",
+      content: text.trim(),
+    });
+    setText("");
+  };
+
+  const handleVote = async (messageId, delta) => {
+    await api(`/api/messages/${messageId}/vote`, {
+      method: "POST",
+      body: JSON.stringify({ username: me, vote: delta }),
+    });
+  };
+
+  // login/signup screen
+  if (!user) {
+    return (
+      <div className="group-chat-container">
+        <div className="sidebar">
+          <h3>Group Shopping</h3>
+          <p>Login or create an account</p>
+        </div>
+        <div className="main-content">
+          <div className="chat-panel auth-panel">
+            <div className="auth-columns">
+              <div className="auth-card">
+                <h4>Login</h4>
+                <div className="form-field"><input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+                <div className="form-field"><input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+                <button onClick={handleLogin}>Login</button>
+              </div>
+              <div className="auth-card">
+                <h4>Sign up</h4>
+                <div className="form-field"><input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} /></div>
+                <div className="form-field"><input placeholder="Display name (optional)" value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></div>
+                <div className="form-field"><input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+                <div className="form-field"><input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+                <button onClick={handleSignup}>Create account</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // main UI
   return (
     <div className="group-chat-container">
       <div className="sidebar">
-        <div className="sidebar-header">
-          <h2>Groups</h2>
-        </div>
+        <div className="sidebar-greeting">Hi, {user.username}</div>
+        <button onClick={handleCreateRoom} className="create-room-btn">+ Create Room</button>
 
-        <div className="groups-list">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              className={`group-item ${
-                selectedGroup?.id === group.id ? "selected" : ""
-              }`}
-              onClick={() => handleGroupClick(group)}
-            >
-              <div className="group-avatar">
-                {group.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="group-info">
-                <div className="group-name">{group.name}</div>
-                <div className="group-last-message">{group.lastMessage}</div>
-              </div>
-              <div className="group-meta">
-                <div className="group-time">{group.time}</div>
-                {group.unreadCount > 0 && (
-                  <div className="unread-badge">{group.unreadCount}</div>
-                )}
-              </div>
-            </div>
+        <div className="section-title">Online Users</div>
+        <div className="online-users-list">
+          {onlineUsers.length === 0 && <div className="muted">No one online</div>}
+          {onlineUsers.map((u) => (
+            <div key={u} className="online-user">🟢 {u}</div>
           ))}
         </div>
 
-        <div className="create-group-section">
-          <button
-            className="create-group-btn"
-            onClick={() => setShowCreateGroup(true)}
-          >
-            <span className="plus-icon">+</span>
-            Create New Group
-          </button>
-        </div>
+        <div className="section-title">Pending Invites</div>
+        {pendingRooms.length === 0 && <div className="muted">No invites</div>}
+        {pendingRooms.map((r) => (
+          <div key={r._id} className="group-item" onClick={() => handleAcceptInvite(r._id)}>
+            {r.name} — Tap to join
+          </div>
+        ))}
+
+        <div className="section-title with-top">Your Rooms</div>
+        {rooms.map((r) => (
+          <div key={r._id} className="group-item" onClick={() => handleJoinRoom(r)}>
+            {r.name}
+          </div>
+        ))}
       </div>
 
       <div className="main-content">
-        {selectedGroup ? (
-          <div className="chat-panel">
-            <div className="chat-header">
-              <h3>{selectedGroup.name}</h3>
-              <div className="group-header-actions">
-                <button
-                  className="group-members-btn"
-                  onClick={() => setShowMembersModal(true)}
-                >
-                  <span className="three-dots">&#x22EE;</span>
-                </button>
-              </div>
-              <p>{selectedGroup.products.length} products shared</p>
-            </div>
-            <div className="products-container">
-              {selectedGroup.products.length > 0 ? (
-                selectedGroup.products.map((product, idx) => (
-                  <div key={product.id} className="product-card">
-                    <div className="product-image">
-                      <img src={product.image} alt={product.name} />
-                    </div>
-                    <div className="product-info">
-                      <h4>{product.name}</h4>
-                      <p className="product-price">{product.price}</p>
-                      <p className="product-sender">
-                        Sent by:{" "}
-                        {selectedGroup.members &&
-                        selectedGroup.members.length > 0
-                          ? selectedGroup.members[
-                              idx % selectedGroup.members.length
-                            ].name
-                          : "Unknown"}
-                      </p>
-                    </div>
-                    <div className="voting-section">
-                      <button
-                        className={`vote-btn upvote ${
-                          product.userVote === 1 ? "active" : ""
-                        }`}
-                        onClick={() =>
-                          handleVote(selectedGroup.id, product.id, 1)
-                        }
-                      >
-                        👍
-                      </button>
-                      <span className="vote-count">{product.votes}</span>
-                      <button
-                        className={`vote-btn downvote ${
-                          product.userVote === -1 ? "active" : ""
-                        }`}
-                        onClick={() =>
-                          handleVote(selectedGroup.id, product.id, -1)
-                        }
-                      >
-                        👎
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="no-products">
-                  <p>No products shared yet</p>
-                  <p>Share your first product to get started!</p>
-                </div>
-              )}
-            </div>
+        {!currentRoom ? (
+          <div className="chat-panel centered-empty">
+            <div className="muted">Select a room to start chatting</div>
           </div>
         ) : (
-          <div className="welcome-message">
-            <h3>Welcome to Group Shopping!</h3>
-            <p>Select a group from the sidebar to view shared products</p>
+          <div className="chat-panel">
+            <div className="chat-messages">
+              {messages.map((m) => {
+                if (m.type === "system") {
+                  return (
+                    <div key={m._id} className="chat-msg other system-msg">
+                      {m.content?.text}
+                    </div>
+                  );
+                }
+                const mine = m.sender?.toLowerCase() === me.toLowerCase();
+                return (
+                  <div key={m._id} className={`chat-msg ${mine ? "me" : "other"}`}>
+                    {m.type === "text" && (
+                      <div className="message">
+                        <span className="sender">{m.sender}:</span>
+                        <span className="content">{m.content}</span>
+                      </div>
+                    )}
+                      {m.type === "product" && (
+                      <div className="product-msg">
+                        <div className="product-row">
+                          {m.content?.image && <img src={m.content.image} alt={m.content?.name || "product"} />}
+                          <div>
+                            <div className="product-name-row">{m.content?.name}</div>
+                            {m.content?.price != null && <div>Rs. {m.content.price}</div>}
+                            <div className="vote-row">
+                              <button onClick={() => handleVote(m._id, 1)}>👍</button>
+                              <button onClick={() => handleVote(m._id, -1)}>👎</button>
+                              <span className="score-chip">{m.votes ?? 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="composer">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Type a message"
+                className="composer-input"
+              />
+              <button onClick={handleSendText}>Send</button>
+            </div>
           </div>
         )}
       </div>
 
-      {showCreateGroup && (
+      {showCreate && (
         <div className="modal-overlay">
-          <div className="create-group-modal">
-            <h3>Create New Group</h3>
-            <input
-              type="text"
-              placeholder="Enter group name"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              className="group-name-input"
-            />
-            <div className="modal-buttons">
-              <button
-                className="cancel-btn"
-                onClick={() => {
-                  setShowCreateGroup(false);
-                  setNewGroupName("");
-                }}
-              >
-                Cancel
-              </button>
-              <button className="create-btn" onClick={handleCreateGroup}>
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showUserSelectionModal && (
-        <div className="modal-overlay">
-          <div className="create-group-modal">
-            <h3>Select Group Members</h3>
-            <input
-              type="text"
-              placeholder="Search users"
-              value={searchTerm}
-              onChange={handleSearchMembers}
-              className="group-name-input"
-            />
-            {searchTerm && (
-              <div className="search-results-list">
-                {filteredUsers.length > 0 ? (
-                  filteredUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      className={`user-item ${
-                        newGroupMembers.some((member) => member.id === user.id)
-                          ? "selected"
-                          : ""
-                      }`}
-                      onClick={() => handleSelectMember(user)}
-                    >
-                      {user.name}
-                    </div>
-                  ))
-                ) : (
-                  <p className="no-users-found">No users found</p>
-                )}
-              </div>
-            )}
-            <div className="selected-members">
-              <h4>Selected Members:</h4>
-              {newGroupMembers.length > 0 ? (
-                <ul className="selected-members-list">
-                  {newGroupMembers.map((member) => (
-                    <li key={member.id}>{member.name}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No members selected</p>
-              )}
-            </div>
-            <div className="modal-buttons">
-              <button
-                className="cancel-btn"
-                onClick={() => {
-                  setShowUserSelectionModal(false);
-                  setnewGroupMembers([]);
-                  setSearchTerm("");
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="create-btn"
-                onClick={handleCreateGroupWithMembers}
-              >
-                Create Group
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMembersModal && (
-        <div className="modal-overlay">
-          <div className="create-group-modal">
-            <h3>Group Members</h3>
-            <ul className="selected-members-list">
-              {(selectedGroup.members || []).map((member) => (
-                <li key={member.id}>{member.name}</li>
+          <div className="room-modal">
+            <h3 className="modal-title">Create new room</h3>
+            <div className="form-field"><input placeholder="Room name" value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} /></div>
+            <div className="user-list">
+              {usersLoading && <div className="muted">Loading users…</div>}
+              {!usersLoading && allUsers.map((u) => (
+                <div key={u.username} className={`user-list-item${invited.includes(u.username) ? " selected" : ""}`} onClick={() => toggleInvite(u.username)}>
+                  <span className={`checkbox${invited.includes(u.username) ? " checked" : ""}`} />
+                  <div className="user-info">
+                    <div className="user-name">{u.username}</div>
+                    {u.displayName && <div className="user-display muted">{u.displayName}</div>}
+                  </div>
+                </div>
               ))}
-            </ul>
-            <div className="modal-buttons">
-              <button
-                className="cancel-btn"
-                onClick={() => setShowMembersModal(false)}
-              >
-                Close
-              </button>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-light" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmCreateRoom} disabled={!newRoomName.trim()}>Create</button>
             </div>
           </div>
         </div>
