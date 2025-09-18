@@ -1,8 +1,71 @@
-import React from "react";
 import "./HomePage.css";
 import myntraLogo from "../assets/Myntra-logo.png";
 import banner from "../assets/banner.png";
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 function HomePage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const me = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem("user") || "null"); } catch { return null; }
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const mode = params.get("auth");
+    if (mode === "login" || mode === "signup") {
+      setAuthMode(mode);
+      setShowAuth(true);
+    } else {
+      setShowAuth(false);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const mode = e?.detail?.mode || "login";
+      setAuthMode(mode);
+      setShowAuth(true);
+    };
+    window.addEventListener("open-auth", handler);
+    return () => window.removeEventListener("open-auth", handler);
+  }, []);
+
+  const closeAuth = () => {
+    setShowAuth(false);
+    const params = new URLSearchParams(location.search);
+    params.delete("auth");
+    navigate({ pathname: "/", search: params.toString() });
+  };
+
+  const api = async (path, opts = {}) => {
+    const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  };
+
+  const handleSignup = async () => {
+    const body = { username, email, password, displayName };
+    await api("/api/signup", { method: "POST", body: JSON.stringify(body) });
+    const data = await api("/api/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    localStorage.setItem("user", JSON.stringify(data.user));
+    closeAuth();
+    navigate("/groupshopping");
+  };
+
+  const handleLogin = async () => {
+    const data = await api("/api/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    localStorage.setItem("user", JSON.stringify(data.user));
+    closeAuth();
+    navigate("/groupshopping");
+  };
+
   return (
     <>
       {/* Promotional Banners */}
@@ -54,6 +117,39 @@ function HomePage() {
           <div className="cashback-text">Flat 7.5% Cashback*</div>
         </div>
       </div>
+
+      {/* Auth Modal */}
+      {showAuth && !me && (
+        <div className="auth-modal-overlay" onClick={closeAuth}>
+          <div className="auth-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="auth-tabs">
+              <button className={`auth-tab ${authMode === "login" ? "active" : ""}`} onClick={() => setAuthMode("login")}>Login</button>
+              <button className={`auth-tab ${authMode === "signup" ? "active" : ""}`} onClick={() => setAuthMode("signup")}>Sign up</button>
+            </div>
+            {authMode === "login" ? (
+              <div className="auth-fields">
+                <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <div className="auth-actions">
+                  <button className="btn btn-light" onClick={closeAuth}>Cancel</button>
+                  <button className="btn btn-primary" onClick={handleLogin}>Login</button>
+                </div>
+              </div>
+            ) : (
+              <div className="auth-fields">
+                <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
+                <input placeholder="Display name (optional)" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <div className="auth-actions">
+                  <button className="btn btn-light" onClick={closeAuth}>Cancel</button>
+                  <button className="btn btn-accent" onClick={handleSignup}>Create account</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Floating Notification */}
       <div className="floating-notification">🔔</div>
