@@ -125,3 +125,113 @@
 .share-button {
   background-color: #4caf50; /* Different color for share button */
 }
+
+/* Share modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.share-modal {
+  background: #fff;
+  width: 360px;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  padding: 16px;
+}
+
+.modal-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.group-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #f0f2f5;
+  border-radius: 6px;
+}
+
+.group-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.group-list-item:last-child {
+  border-bottom: none;
+}
+.group-list-item.selected {
+  background: #e8f4fd;
+  color: #ff3f6c;
+  font-weight: 500;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ff3f6c;
+  border-radius: 6px;
+  display: inline-block;
+  position: relative;
+  background: #fff;
+}
+.checkbox.checked {
+  background: #ff3f6c;
+}
+.checkbox.checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 6px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.group-name {
+  flex: 1;
+}
+
+.empty-groups {
+  padding: 12px;
+  text-align: center;
+  color: #666;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.btn {
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: #ff3f6c;
+  color: #fff;
+}
+.btn-light {
+  background: #fff;
+  color: #333;
+  border-color: #ddd;
+}
